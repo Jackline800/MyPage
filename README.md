@@ -8,11 +8,11 @@
 
 ### 1. 全球氣象衛星軌道分佈 (SAT_PRO)
 * **核心功能**：3D 視覺化呈現同步軌道 (GEO) 與繞極軌道 (LEO) 配置。
-* **[點此觀看系統](https://jackline800.github.io/MyPage/SAT_PRO/index.html)**
+* **[點此觀看系統](https://jackline800.github.io/MetSat-Viz/SAT_PRO/index.html)**
 
 ### 2. 日韓氣象衛星世代演進 (HimaCOMS)
 * **核心功能**：時間軸互動分析，含 Himawari 與 COMS/GK 系列演進。
-* **[點此觀看時間軸](https://jackline800.github.io/MyPage/HimaCOMS/index.html)**
+* **[點此觀看時間軸](https://jackline800.github.io/MetSat-Viz/HimaCOMS/index.html)**
 
 ---
 
