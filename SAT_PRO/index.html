@@ -56,7 +56,19 @@
     </div>
 
     <div class="group">
-        <label>2. 地球自轉與縮放 (滾輪控制)</label>
+        <label>2. 🛰️ 軌道半徑/高度調整</label>
+        <div style="margin-bottom: 8px;">
+            <span style="font-size: 0.75rem; color: #555;">同步軌道遠近 (GEO Radius):</span>
+            <input type="range" id="geo-radius-ctrl" min="3.3" max="6.0" step="0.05" value="3.65">
+        </div>
+        <div>
+            <span style="font-size: 0.75rem; color: #555;">低軌/繞極遠近 (LEO Radius):</span>
+            <input type="range" id="leo-radius-ctrl" min="3.05" max="4.5" step="0.05" value="3.25">
+        </div>
+    </div>
+
+    <div class="group">
+        <label>3. 地球自轉速度控制</label>
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="range" id="speed-ctrl" min="0" max="0.01" step="0.0001" value="0.001">
             <button id="rot-btn" onclick="toggleRotation()" style="width:80px;">暫停</button>
@@ -64,18 +76,25 @@
     </div>
 
     <div class="group">
-        <label>3. 衛星庫 (勾選顯示 / 換圖)</label>
+        <label>4. 衛星庫 (勾選顯示 / 換圖)</label>
         <div id="library"></div>
     </div>
 
     <div class="group">
-        <label>4. 手動新增衛星</label>
-        <div style="display: flex; gap: 3px;">
+        <label>5. 手動新增衛星</label>
+        <div style="display: flex; gap: 3px; margin-bottom: 5px;">
             <input type="text" id="cust-name" placeholder="名稱" style="flex:2;">
-            <input type="number" id="cust-lon" placeholder="經" style="flex:1;">
-            <input type="number" id="cust-lat" placeholder="緯" style="flex:1;">
+            <select id="cust-orb" style="flex:2; padding: 4px; font-size: 0.8rem; border-radius: 5px; border: 1px solid #ddd;">
+                <option value="GEO">同步軌道 (GEO)</option>
+                <option value="LEO_WX">低軌/繞極 (氣象)</option>
+                <option value="LEO_ENV">低軌/繞極 (環境)</option>
+            </select>
         </div>
-        <button style="background: #27ae60;" onclick="addCustom()">部署</button>
+        <div style="display: flex; gap: 3px;">
+            <input type="number" id="cust-lon" placeholder="經度 (如 121)" style="flex:1;">
+            <input type="number" id="cust-lat" placeholder="緯度 (如 23)" style="flex:1;">
+        </div>
+        <button style="background: #27ae60;" onclick="addCustom()">部署衛星</button>
     </div>
     
     <input type="file" id="hidden-file-input" style="display:none;" accept="image/*">
@@ -88,9 +107,10 @@
 
 <script>
     let scene, camera, renderer, globe, controls, isRotating = true, targetIdx = null;
+    let geoRadius = 3.65, leoRadius = 3.25; // 軌道半徑全局變數
     const activeSats = new Map(), labelPairs = [];
 
-    // 衛星資料庫：已設定相對路徑。未指定 icon 的衛星會自動維持小圓點狀態
+    // 衛星資料庫：已完美拆分氣象與環境核心任務
     const satDatabase = [
         // --- GEO Core 地球同步衛星 ---
         { cat: "GEO 靜止軌道", name: "Himawari-9 (140.7E)", lon: 140.7, lat: 0, orb: "GEO", color: 0xffa502, icon: "衛星/地球同步/H89.png" },
@@ -102,18 +122,18 @@
         { cat: "GEO 靜止軌道", name: "GK-2A (128.2E)", lon: 128.2, lat: 0, orb: "GEO", color: 0x54a0ff },
         { cat: "GEO 靜止軌道", name: "INSAT-3DR (74E)", lon: 74, lat: 0, orb: "GEO", color: 0xe67e22 },
 
-        // --- LEO SSO 繞極/低軌衛星 (未來圖檔請放置於 衛星/繞極/ 資料夾下) ---
-        { cat: "LEO 繞極軌道", name: "Metop-C (Morning)", lon: 0, lat: 0, orb: "LEO", color: 0x1dd1a1 },
-        { cat: "LEO 繞極軌道", name: "Metop-B (Morning)", lon: 0, lat: 0, orb: "LEO", color: 0x1dd1a1 },
-        { cat: "LEO 繞極軌道", name: "NOAA-21 (Afternoon)", lon: 0, lat: 0, orb: "LEO", color: 0x2ecc71 },
-        { cat: "LEO 繞極軌道", name: "Suomi-NPP", lon: 0, lat: 0, orb: "LEO", color: 0x10ac84 },
-        { cat: "LEO 繞極軌道", name: "FY-3F (Morning)", lon: 0, lat: 0, orb: "LEO", color: 0xee5253 },
-        { cat: "LEO 繞極軌道", name: "FY-3E (Early Morning)", lon: 0, lat: 0, orb: "LEO", color: 0xee5253 },
+        // --- LEO (氣象為主) ---
+        { cat: "低軌/繞極 (氣象為主)", name: "Metop-C (Morning)", lon: 0, lat: 0, orb: "LEO", color: 0x1dd1a1 },
+        { cat: "低軌/繞極 (氣象為主)", name: "Metop-B (Morning)", lon: 30, lat: 0, orb: "LEO", color: 0x1dd1a1 },
+        { cat: "低軌/繞極 (氣象為主)", name: "NOAA-21 (Afternoon)", lon: 60, lat: 0, orb: "LEO", color: 0x2ecc71 },
+        { cat: "低軌/繞極 (氣象為主)", name: "Suomi-NPP", lon: 90, lat: 0, orb: "LEO", color: 0x10ac84 },
+        { cat: "低軌/繞極 (氣象為主)", name: "FY-3F (Morning)", lon: 120, lat: 0, orb: "LEO", color: 0xee5253 },
+        { cat: "低軌/繞極 (氣象為主)", name: "FY-3E (Early Morning)", lon: 150, lat: 0, orb: "LEO", color: 0xee5253 },
 
-        // --- Research 特殊研究軌道 ---
-        { cat: "特殊/研究軌道", name: "COSMIC-2 (Inclined)", lon: 121.5, lat: 23.5, orb: "LEO", color: 0x5f27cd },
-        { cat: "特殊/研究軌道", name: "GPM-Core (Rain)", lon: -10, lat: 35, orb: "LEO", color: 0x00d2d3 },
-        { cat: "特殊/研究軌道", name: "Sentinel-6", lon: 180, lat: -20, orb: "LEO", color: 0x48dbfb }
+        // --- LEO (環境為主) ---
+        { cat: "低軌/繞極 (環境為主)", name: "COSMIC-2 (Inclined)", lon: 200, lat: 23.5, orb: "LEO", color: 0x5f27cd },
+        { cat: "低軌/繞極 (環境為主)", name: "GPM-Core (Rain)", lon: 250, lat: 35, orb: "LEO", color: 0x00d2d3 },
+        { cat: "低軌/繞極 (環境為主)", name: "Sentinel-6", lon: 300, lat: -20, orb: "LEO", color: 0x48dbfb }
     ];
 
     function init() {
@@ -128,7 +148,6 @@
         controls.enableDamping = true;
         controls.minDistance = 4; controls.maxDistance = 25;
 
-        // 先上深藍色底漆防止黑球
         const globeMat = new THREE.MeshPhongMaterial({ color: 0x1b4f72, shininess: 15 });
         globe = new THREE.Mesh(new THREE.SphereGeometry(3, 64, 64), globeMat);
         scene.add(globe);
@@ -138,8 +157,8 @@
 
         buildLibrary();
         setupMapSelector();
+        setupRadiusSliders(); // 啟用遠近控制器
 
-        // 載入初始底圖
         new THREE.TextureLoader().load('City_Light_ETOPO.png', t => {
             globe.material.map = t;
             globe.material.color.setHex(0xffffff);
@@ -151,6 +170,28 @@
         animate();
     }
 
+    // 監聽軌道遠近調整拉桿
+    function setupRadiusSliders() {
+        document.getElementById('geo-radius-ctrl').oninput = function(e) {
+            geoRadius = parseFloat(e.target.value);
+            updateStaticGeoPositions(); // 即時重繪同步衛星空間位置
+        };
+        document.getElementById('leo-radius-ctrl').oninput = function(e) {
+            leoRadius = parseFloat(e.target.value);
+        };
+    }
+
+    // 即時更新靜態 GEO 衛星在空間中的分佈遠近
+    function updateStaticGeoPositions() {
+        labelPairs.forEach(p => {
+            if (p.satData.orb === "GEO") {
+                const phi = (90 - p.satData.lat) * (Math.PI / 180);
+                const theta = (p.satData.lon + 180) * (Math.PI / 180);
+                p.mesh.position.set(-geoRadius * Math.sin(phi) * Math.cos(theta), geoRadius * Math.cos(phi), geoRadius * Math.sin(phi) * Math.sin(theta));
+            }
+        });
+    }
+
     function setupMapSelector() {
         document.getElementById('map-selector').onchange = function(e) {
             const selectedPath = e.target.value;
@@ -159,7 +200,7 @@
                 globe.material.color.setHex(0xffffff);
                 globe.material.needsUpdate = true; 
             }, undefined, err => {
-                alert("⚠️ 載入失敗！找不到圖片：" + selectedPath + "\n請確認是否已上傳、路徑或大小寫是否正確。");
+                alert("⚠️ 載入失敗！找不到圖片：" + selectedPath + "\n請確認是否已上傳至同資料夾中。");
             });
         };
     }
@@ -195,45 +236,36 @@
         if (chk.checked) { activeSats.set(idx, createSatObj(sat)); } else { removeSat(idx); }
     }
 
+    // 【修正完成】：完整清除元件，阻絕殭屍定點文字殘留
     function removeSat(idx) {
         const d = activeSats.get(idx); if (d) { 
             if (d.satData.orb === "GEO") globe.remove(d.mesh); else scene.remove(d.mesh);
-            d.element.remove(); // 👈 只有這裡要改！把 label 改成 element
-            labelPairs.splice(labelPairs.indexOf(d), 1); 
-            activeSats.delete(idx); 
+            d.element.remove(); // 修正：d.label -> d.element 徹底移除文字
+            labelPairs.splice(labelPairs.indexOf(d), 1); activeSats.delete(idx); 
         }
     }
 
-    // 關鍵升級：支援動態無縫降級的衛星物件建立函數
     function createSatObj(sat) {
         const phi = (90 - sat.lat) * (Math.PI / 180), theta = (sat.lon + 180) * (Math.PI / 180);
-        
-        // 建立一個 3D 群組容器
         const container = new THREE.Group();
         
-        // 建立預設的立體 3D 圓點
         const fallbackMesh = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), new THREE.MeshBasicMaterial({ color: sat.color }));
         container.add(fallbackMesh);
 
-        // 如果資料庫中有指定圖標路徑，嘗試在背景非同步載入
         if (sat.icon) {
             new THREE.TextureLoader().load(sat.icon, t => {
-                // 載入成功：把原本的立體圓點拔掉，換成精美的去背圖片 Sprite
                 container.remove(fallbackMesh);
                 const spriteMat = new THREE.SpriteMaterial({ map: t });
                 const sprite = new THREE.Sprite(spriteMat);
                 sprite.scale.set(0.4, 0.4, 1);
                 container.add(sprite);
             }, undefined, err => {
-                // 載入失敗（圖檔還沒上傳或不完全）：不執行任何動作，維持原本的立體圓點
-                console.log(`圖標 ${sat.icon} 暫無或讀取失敗，此衛星將自動維持圓點顯示。`);
+                console.log(`未檢測到去背圖檔：${sat.icon}，已自動切換為高亮圓點標註。`);
             });
         }
 
-        // 根據軌道類型決定要把容器掛在旋轉的地球上還是太空場景中
         if (sat.orb === "GEO") {
-            const alt = 3.65;
-            container.position.set(-alt * Math.sin(phi) * Math.cos(theta), alt * Math.cos(phi), alt * Math.sin(phi) * Math.sin(theta));
+            container.position.set(-geoRadius * Math.sin(phi) * Math.cos(theta), geoRadius * Math.cos(phi), geoRadius * Math.sin(phi) * Math.sin(theta));
             globe.add(container);
         } else {
             scene.add(container);
@@ -253,8 +285,17 @@
 
         labelPairs.forEach(p => {
             if (p.satData.orb === "LEO") {
-                const speed = 0.4; const radius = 3.25;
-                p.mesh.position.set(0, radius * Math.cos(time * speed + p.offset), radius * Math.sin(time * speed + p.offset));
+                const speed = 0.4;
+                const angle = time * speed + p.offset;
+                
+                // 高級優化：根據衛星設定的基準經度 (lon)，將動態繞極軌道面分流旋轉，防止疊圖
+                const y = leoRadius * Math.cos(angle);
+                const r_xz = leoRadius * Math.sin(angle);
+                const lonRad = (p.satData.lon || 0) * (Math.PI / 180);
+                
+                const x = -r_xz * Math.cos(lonRad);
+                const z = r_xz * Math.sin(lonRad);
+                p.mesh.position.set(x, y, z);
             }
             const worldPos = new THREE.Vector3(); p.mesh.getWorldPosition(worldPos);
             const cameraDist = camera.position.distanceTo(worldPos), globeDist = camera.position.distanceTo(globe.position);
@@ -277,14 +318,39 @@
         }; r.readAsDataURL(e.target.files[0]);
     };
 
+    // 手動新增部署邏輯：完整串接任務分類與特定繞極面配置
     function addCustom() {
-        const n = document.getElementById('cust-name').value || "Custom";
-        const lo = parseFloat(document.getElementById('cust-lon').value), la = parseFloat(document.getElementById('cust-lat').value);
-        if (!isNaN(lo) && !isNaN(la)) {
-            satDatabase.push({ cat: "手動新增", name: n, lon: lo, lat: la, orb: "LEO", color: 0x27ae60 });
-            buildLibrary(); const idx = satDatabase.length - 1;
-            document.getElementById(`chk-${idx}`).checked = true; toggleSat(idx);
+        const n = document.getElementById('cust-name').value || "未命名衛星";
+        const lo = parseFloat(document.getElementById('cust-lon').value) || 0;
+        const la = parseFloat(document.getElementById('cust-lat').value) || 0;
+        const orbType = document.getElementById('cust-orb').value;
+        
+        let category = "手動新增";
+        let orb = "GEO";
+        let color = 0x27ae60;
+        let iconPath = undefined;
+        
+        if (orbType === "GEO") {
+            category = "GEO 靜止軌道";
+            orb = "GEO";
+            color = 0xffa502;
+        } else if (orbType === "LEO_WX") {
+            category = "低軌/繞極 (氣象為主)";
+            orb = "LEO";
+            color = 0x1dd1a1;
+            iconPath = "衛星/繞極/custom_wx.png"; // 預留自訂氣象低軌圖徑
+        } else if (orbType === "LEO_ENV") {
+            category = "低軌/繞極 (環境為主)";
+            orb = "LEO";
+            color = 0x5f27cd;
+            iconPath = "衛星/繞極/custom_env.png"; // 預留自訂環境低軌圖徑
         }
+        
+        satDatabase.push({ cat: category, name: n, lon: lo, lat: la, orb: orb, color: color, icon: iconPath });
+        buildLibrary(); 
+        const idx = satDatabase.length - 1;
+        document.getElementById(`chk-${idx}`).checked = true; 
+        toggleSat(idx);
     }
 
     window.addEventListener('resize', () => {
