@@ -44,7 +44,14 @@
     <h2>WMO 衛星系統 (全數據匯入)</h2>
     
     <div class="group">
-        <label>1. 地球底圖 (等經緯 PNG/JPG)</label>
+        <label>1. 🌍 全球觀測底圖切換</label>
+        <select id="map-selector" style="margin-bottom: 8px;">
+            <option value="City_Light_ETOPO.png">方案一：城市夜間燈光圖 (預設)</option>
+            <option value="ETOPO1_ELEVATION_OL_small.png">方案二：地形底圖（一）</option>
+            <option value="ETOPO1_GMT_small.png">方案三：地形底圖（二）</option>
+            <option value="ETOPO_CLD.png">方案四：模擬動態雲圖</option>
+        </select>
+        <label style="font-size: 0.75rem; color: #7f8c8d; font-weight: normal;">或手動匯入本地地圖：</label>
         <input type="file" id="map-upload" accept="image/*">
     </div>
 
@@ -83,10 +90,9 @@
     let scene, camera, renderer, globe, controls, isRotating = true, targetIdx = null;
     const activeSats = new Map(), labelPairs = [];
 
-    // 擴展 WMO 資料庫 - 補全 GEO 與 LEO SSO 核心
     const satDatabase = [
         // --- GEO Core ---
-        { cat: "GEO 靜止軌道", name: "Himawari-9 (140.7E)", lon: 140.7, lat: 0, orb: "GEO", color: 0xffa502 },
+        { cat: "GEO 靜止軌道", name: "Himawari-9 (140.7E)", lon: 140.7, lat: 0, orb: "GEO", color: 0xffa502, icon: "衛星/Himawari-9.png" },
         { cat: "GEO 靜止軌道", name: "GOES-18 (137.2W)", lon: -137.2, lat: 0, orb: "GEO", color: 0x70a1ff },
         { cat: "GEO 靜止軌道", name: "GOES-16 (75.2W)", lon: -75.2, lat: 0, orb: "GEO", color: 0x70a1ff },
         { cat: "GEO 靜止軌道", name: "Meteosat-12 (0.3W)", lon: -0.3, lat: 0, orb: "GEO", color: 0x2ed573 },
@@ -120,14 +126,30 @@
         controls.enableDamping = true;
         controls.minDistance = 4; controls.maxDistance = 25;
 
-        globe = new THREE.Mesh(new THREE.SphereGeometry(3, 64, 64), new THREE.MeshPhongMaterial({ shininess: 15 }));
+        // 修正：預設地球材質直接讀取同層資料夾下的 City_Light_ETOPO.png
+        const textureLoader = new THREE.TextureLoader();
+        const defaultMap = textureLoader.load('City_Light_ETOPO.png');
+        globe = new THREE.Mesh(new THREE.SphereGeometry(3, 64, 64), new THREE.MeshPhongMaterial({ map: defaultMap, shininess: 15 }));
         scene.add(globe);
 
         const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(5, 5, 5); scene.add(sun);
-        scene.add(new THREE.AmbientLight(0x444444));
+        scene.add(new THREE.AmbientLight(0x555555));
 
         buildLibrary();
+        setupMapSelector();
         animate();
+    }
+
+    function setupMapSelector() {
+        document.getElementById('map-selector').onchange = function(e) {
+            const selectedPath = e.target.value;
+            new THREE.TextureLoader().load(selectedPath, t => { 
+                globe.material.map = t; 
+                globe.material.needsUpdate = true; 
+            }, undefined, err => {
+                console.error("底圖載入失敗，請確認檔案大小寫與路徑：", selectedPath);
+            });
+        };
     }
 
     function buildLibrary() {
@@ -171,9 +193,14 @@
     function createSatObj(sat) {
         const phi = (90 - sat.lat) * (Math.PI / 180), theta = (sat.lon + 180) * (Math.PI / 180);
         let mesh;
+        
         if (sat.icon) {
-            mesh = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.TextureLoader().load(sat.icon) }));
-            mesh.scale.set(0.5, 0.5, 1);
+            mesh = new THREE.Sprite(new THREE.SpriteMaterial({ 
+                map: new THREE.TextureLoader().load(sat.icon, undefined, undefined, () => {
+                    mesh.material = new THREE.SpriteMaterial({ color: sat.color });
+                }) 
+            }));
+            mesh.scale.set(0.4, 0.4, 1);
         } else {
             mesh = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), new THREE.MeshBasicMaterial({ color: sat.color }));
         }
