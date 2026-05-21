@@ -198,7 +198,9 @@
     function removeSat(idx) {
         const d = activeSats.get(idx); if (d) { 
             if (d.satData.orb === "GEO") globe.remove(d.mesh); else scene.remove(d.mesh);
-            d.label.remove(); labelPairs.splice(labelPairs.indexOf(d), 1); activeSats.delete(idx); 
+            d.element.remove(); // 👈 只有這裡要改！把 label 改成 element
+            labelPairs.splice(labelPairs.indexOf(d), 1); 
+            activeSats.delete(idx); 
         }
     }
 
