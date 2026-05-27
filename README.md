@@ -6,7 +6,7 @@
 
 ---
 
-## 🌐 <span style="font-size: 24px;">線上作品展示(建議使用 Ctrl + 點擊，或滑鼠右鍵另開分頁。)</span>
+## 🌐 <span style="font-size: 24px;">網頁展示(建議使用 Ctrl + 點擊，或滑鼠右鍵另開分頁。)</span>
 
 <div style="margin-left: 20px;">
 
@@ -26,7 +26,7 @@
 
 ---
 
-## 🛠️ <span style="font-size: 24px;">專案架構說明</span>
+## 🛠️ <span style="font-size: 24px;">架構說明</span>
 
 <ul style="font-size: 16px; line-height: 1.8;">
   <li><strong>SAT_PRO/</strong>：衛星軌道分佈主程式與衛星影像資料庫。</li>
