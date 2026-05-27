@@ -36,7 +36,7 @@
 
 <br>
 
-<span style="font-size: 14px; color: #888;">維護者：葉子嫈 </span>
+<span style="font-size: 14px; color: #888;">維護者：葉子嫈 | 專長：衛星遙測、大氣科學與數值分析</span>
 <br>
 <span style="font-size: 14px; color: #888;">Jackline 115/05/27</span>
 
