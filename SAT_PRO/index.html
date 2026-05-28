@@ -156,9 +156,13 @@
 <script>
     let scene, camera, renderer, globe, controls, isRotating = true, targetIdx = null;
 	let geoRadius = 3.65, leoRadius = 3.25; 
+
+	// 界王星專用物件群組
 	let kingKaiGroup = null;
 
+	// 你的地球半徑原本是 3
 	const GLOBE_RADIUS = 3;
+
 	const activeSats = new Map(), labelPairs = [];
 
     // 【載入究極完整數據】：100% 全陣列
@@ -341,8 +345,8 @@
 
         const globeMat = new THREE.MeshPhongMaterial({ color: 0x1b4f72, shininess: 15 });
         globe = new THREE.Mesh(
-			new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64),
-			globeMat
+		new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64),
+		globeMat
 		);
         scene.add(globe);
 
@@ -354,12 +358,16 @@
         setupRadiusSliders(); 
 
         new THREE.TextureLoader().load('ETOPO_CLD.png', t => {
-            globe.material.map = t;
-            globe.material.color.setHex(0xffffff);
-            globe.material.needsUpdate = true;
-        }, undefined, err => {
-            console.error("預設底圖載入失敗，可能正在本機執行或解析度過大", err);
-        });
+		t.wrapS = THREE.RepeatWrapping;
+		t.wrapT = THREE.ClampToEdgeWrapping;
+		t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+		globe.material.map = t;
+		globe.material.color.setHex(0xffffff);
+		globe.material.needsUpdate = true;
+	}, undefined, err => {
+		console.error("預設底圖載入失敗，可能正在本機執行或解析度過大", err);
+	});
 
         animate();
     }
@@ -383,6 +391,12 @@
             }
         });
     }
+
+    // =====================================================
+	// A 版：界王星 3D 物件
+	// 特色：球體底圖只放草地與道路，房子、樹、車、小井用 3D 物件生成
+	// =====================================================
+
 	function latLonToVector3(lat, lon, radius) {
 		const phi = (90 - lat) * Math.PI / 180;
 		const theta = (lon + 180) * Math.PI / 180;
@@ -400,150 +414,466 @@
 
 		obj.position.copy(pos);
 
+		// 讓物件的 Y 軸朝球面外側
 		obj.quaternion.setFromUnitVectors(
 			new THREE.Vector3(0, 1, 0),
 			normal
 		);
 
+		// 物件在當地表面旋轉方向
 		obj.rotateY(spin);
 	}
-
+	
 	function clearKingKaiObjects() {
-		if (kingKaiGroup) {
-			globe.remove(kingKaiGroup);
+		if (!kingKaiGroup) return;
 
-			kingKaiGroup.traverse(obj => {
-				if (obj.geometry) obj.geometry.dispose();
+		globe.remove(kingKaiGroup);
 
-				if (obj.material) {
-					if (Array.isArray(obj.material)) {
-						obj.material.forEach(m => m.dispose());
-					} else {
-						obj.material.dispose();
-					}
+		kingKaiGroup.traverse(obj => {
+			if (obj.geometry) obj.geometry.dispose();
+	
+			if (obj.material) {
+				if (Array.isArray(obj.material)) {
+					obj.material.forEach(m => m.dispose());
+				} else {
+					obj.material.dispose();
 				}
-			});
+			}
+		});
 
-			kingKaiGroup = null;
-		}
+		kingKaiGroup = null;
 	}
 
 	function createKingKaiObjects() {
 		clearKingKaiObjects();
-
+	
 		kingKaiGroup = new THREE.Group();
 
-		// 圓頂房子
-		const house = new THREE.Group();
+		// ===== 主要物件 =====
 
-		const domeMat = new THREE.MeshPhongMaterial({ color: 0xd9a45f });
-		const doorMat = new THREE.MeshPhongMaterial({ color: 0x4b4b4b });
+		const mainHouse = createMainDomeHouse();
+		placeOnGlobe(mainHouse, 36, 18, GLOBE_RADIUS + 0.06, -0.35);
+		kingKaiGroup.add(mainHouse);
 
-		const dome = new THREE.Mesh(
-			new THREE.SphereGeometry(0.35, 32, 16),
-			domeMat
-		);
-		dome.scale.y = 0.65;
-		dome.position.y = 0.18;
-		house.add(dome);
+		const smallHouse = createSmallHalfRoundHouse();
+		placeOnGlobe(smallHouse, 34, 55, GLOBE_RADIUS + 0.06, 0.25);
+		kingKaiGroup.add(smallHouse);
 
-		const base = new THREE.Mesh(
-			new THREE.CylinderGeometry(0.35, 0.35, 0.18, 32),
-			domeMat
-		);
-		base.position.y = 0.05;
-		house.add(base);
+		const well = createBlueWell();
+		placeOnGlobe(well, 24, 45, GLOBE_RADIUS + 0.06, 0);
+		kingKaiGroup.add(well);
 
-		const door = new THREE.Mesh(
-			new THREE.BoxGeometry(0.12, 0.18, 0.03),
-			doorMat
-		);
-		door.position.set(0, 0.08, 0.35);
-		house.add(door);
-
-		placeOnGlobe(house, 35, 20, GLOBE_RADIUS + 0.08, 0);
-		kingKaiGroup.add(house);
-
-		// 小屋
-		const shed = new THREE.Group();
-
-		const shedBody = new THREE.Mesh(
-			new THREE.BoxGeometry(0.35, 0.25, 0.28),
-			new THREE.MeshPhongMaterial({ color: 0xc89b57 })
-		);
-		shedBody.position.y = 0.13;
-		shed.add(shedBody);
-
-		placeOnGlobe(shed, 28, 55, GLOBE_RADIUS + 0.06, 0.5);
-		kingKaiGroup.add(shed);
-
-		// 車子
-		const car = new THREE.Group();
-
-		const carBody = new THREE.Mesh(
-			new THREE.BoxGeometry(0.35, 0.12, 0.18),
-			new THREE.MeshPhongMaterial({ color: 0xd71920 })
-		);
-		carBody.position.y = 0.08;
-		car.add(carBody);
-
-		const carRoof = new THREE.Mesh(
-			new THREE.BoxGeometry(0.18, 0.08, 0.15),
-			new THREE.MeshPhongMaterial({ color: 0xffffff })
-		);
-		carRoof.position.y = 0.18;
-		car.add(carRoof);
-
-		placeOnGlobe(car, 0, 25, GLOBE_RADIUS + 0.08, Math.PI / 2);
+		const car = createRedCar();
+		placeOnGlobe(car, 0, 20, GLOBE_RADIUS + 0.09, Math.PI / 2);
 		kingKaiGroup.add(car);
 
-		// 樹木
-		const treePositions = [
-			[35, -40],
-			[20, -90],
-			[15, 100],
-			[-25, -60],
-			[-30, 80],
-			[45, 140]
+		// ===== 樹木配置 =====
+		// 位置參考你的公仔照片，集中在上半部與側邊
+		const treeData = [
+			{ lat: 42, lon: -35, size: 1.15, spin: 0.2 },
+			{ lat: 38, lon: 80,  size: 1.05, spin: -0.4 },
+			{ lat: 30, lon: 115, size: 0.95, spin: 0.5 },
+			{ lat: 22, lon: -95, size: 0.95, spin: -0.2 },
+			{ lat: -28, lon: -60, size: 0.9, spin: 0.3 },
+			{ lat: -25, lon: 95,  size: 0.9, spin: -0.5 }
 		];
 
-		treePositions.forEach(([lat, lon]) => {
-			const tree = createSimpleTree();
-			placeOnGlobe(tree, lat, lon, GLOBE_RADIUS + 0.05, 0);
+		treeData.forEach(t => {
+			const tree = createPuffyTree(t.size);
+			placeOnGlobe(tree, t.lat, t.lon, GLOBE_RADIUS + 0.045, t.spin);
 			kingKaiGroup.add(tree);
 		});
 
 		globe.add(kingKaiGroup);
 	}
 
-	function createSimpleTree() {
-		const tree = new THREE.Group();
+	// =====================================================
+	// 主屋：圓頂屋
+	// =====================================================
 
-		const trunk = new THREE.Mesh(
-			new THREE.CylinderGeometry(0.035, 0.05, 0.22, 12),
-			new THREE.MeshPhongMaterial({ color: 0x7a4a20 })
+	function createMainDomeHouse() {
+		const group = new THREE.Group();
+
+		const wallMat = new THREE.MeshPhongMaterial({
+			color: 0xd99b45,
+			shininess: 25
+		});
+
+		const darkMat = new THREE.MeshPhongMaterial({
+			color: 0x222222,
+			shininess: 10
+		});
+
+		const whiteMat = new THREE.MeshPhongMaterial({
+			color: 0xf2f2f2,
+			shininess: 35
+		});
+
+		const grayMat = new THREE.MeshPhongMaterial({
+			color: 0x9b9b9b,
+			shininess: 20
+		});
+
+		const woodMat = new THREE.MeshPhongMaterial({
+			color: 0x8b5a2b,
+			shininess: 10
+		});
+
+		// 圓頂主體
+		const dome = new THREE.Mesh(
+			new THREE.SphereGeometry(0.42, 32, 20),
+			wallMat
 		);
-		trunk.position.y = 0.1;
-		tree.add(trunk);
+		dome.scale.set(1.0, 0.72, 1.0);
+		dome.position.y = 0.26;
+		group.add(dome);
 
-		const leaf = new THREE.Mesh(
-			new THREE.SphereGeometry(0.18, 16, 16),
-			new THREE.MeshPhongMaterial({ color: 0x2f8f2f })
+		// 下方圓柱基座
+		const base = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.42, 0.42, 0.18, 32),
+			wallMat
 		);
-		leaf.position.y = 0.28;
-		tree.add(leaf);
+		base.position.y = 0.10;
+		group.add(base);
 
-		return tree;
+		// 屋頂白色圓盤
+		const roofDisc = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.20, 0.20, 0.035, 32),
+			whiteMat
+		);
+		roofDisc.position.y = 0.60;
+		group.add(roofDisc);
+
+		const roofRing = new THREE.Mesh(
+			new THREE.TorusGeometry(0.17, 0.015, 12, 48),
+			grayMat
+		);
+		roofRing.position.y = 0.625;
+		roofRing.rotation.x = Math.PI / 2;
+		group.add(roofRing);
+
+		// 天線
+		const antenna = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.01, 0.01, 0.36, 8),
+			grayMat
+		);
+		antenna.position.y = 0.83;
+		antenna.rotation.z = -0.15;
+		group.add(antenna);
+
+		const antennaBall = new THREE.Mesh(
+			new THREE.SphereGeometry(0.035, 12, 12),
+			darkMat
+		);
+		antennaBall.position.set(0.03, 1.01, 0);
+		group.add(antennaBall);
+
+		// 拱門外框
+		const doorFrame = new THREE.Mesh(
+			new THREE.BoxGeometry(0.18, 0.28, 0.045),
+			grayMat
+		);
+		doorFrame.position.set(0, 0.18, 0.42);
+		group.add(doorFrame);
+
+		// 黑色門
+		const door = new THREE.Mesh(
+			new THREE.BoxGeometry(0.12, 0.22, 0.055),
+			darkMat
+		);
+		door.position.set(0, 0.16, 0.45);
+		group.add(door);
+
+		// 兩側黑窗，接近範本的橫向窄窗
+		const win1 = new THREE.Mesh(
+			new THREE.BoxGeometry(0.16, 0.05, 0.035),
+			darkMat
+		);
+		win1.position.set(-0.28, 0.31, 0.26);
+		win1.rotation.y = -0.55;
+		group.add(win1);
+
+		const win2 = win1.clone();
+		win2.position.set(0.28, 0.31, 0.26);
+		win2.rotation.y = 0.55;
+		group.add(win2);
+
+		// 小樓梯 / 木板
+		const step1 = new THREE.Mesh(
+			new THREE.BoxGeometry(0.30, 0.04, 0.22),
+			woodMat
+		);
+		step1.position.set(0, 0.04, 0.56);
+		group.add(step1);
+
+		const step2 = new THREE.Mesh(
+			new THREE.BoxGeometry(0.36, 0.035, 0.18),
+			woodMat
+		);
+		step2.position.set(0, 0.015, 0.68);
+		group.add(step2);
+
+		// 側邊小煙囪
+		const chimney = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.045, 0.055, 0.20, 12),
+			grayMat
+		);
+		chimney.position.set(0.36, 0.22, 0.12);
+		chimney.rotation.z = 0.1;
+		group.add(chimney);
+
+		return group;
 	}
+
+	// =====================================================
+	// 小屋：半圓桶形屋
+	// =====================================================
+
+	function createSmallHalfRoundHouse() {
+		const group = new THREE.Group();
+
+		const yellowMat = new THREE.MeshPhongMaterial({
+			color: 0xd8a24a,
+			shininess: 20
+		});
+
+		const darkMat = new THREE.MeshPhongMaterial({
+			color: 0x333333,
+			shininess: 10
+		});
+
+		const grayMat = new THREE.MeshPhongMaterial({
+			color: 0xa8a8a8,
+			shininess: 20
+		});
+
+		// 半圓桶小屋用縮放圓柱近似
+		const body = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.20, 0.20, 0.34, 24),
+			yellowMat
+		);
+		body.rotation.z = Math.PI / 2;
+		body.scale.y = 0.75;
+		body.position.y = 0.18;
+		group.add(body);
+
+		// 正面門
+		const door = new THREE.Mesh(
+			new THREE.BoxGeometry(0.15, 0.14, 0.035),
+			grayMat
+		);
+		door.position.set(0, 0.15, 0.22);
+		group.add(door);
+
+		const darkDoor = new THREE.Mesh(
+			new THREE.BoxGeometry(0.11, 0.10, 0.045),
+			darkMat
+		);
+		darkDoor.position.set(0, 0.145, 0.245);
+		group.add(darkDoor);
+
+		// 側邊黑色小窗
+		const sideWin = new THREE.Mesh(
+			new THREE.BoxGeometry(0.13, 0.045, 0.035),
+			darkMat
+		);
+		sideWin.position.set(-0.18, 0.24, 0.08);
+		sideWin.rotation.y = -0.55;
+		group.add(sideWin);
+
+		return group;
+	}
+
+	// =====================================================
+	// 小井 / 藍色圓形裝飾
+	// =====================================================
+
+	function createBlueWell() {
+		const group = new THREE.Group();
+
+		const stoneMat = new THREE.MeshPhongMaterial({
+			color: 0x777777,
+			shininess: 20
+		});
+
+		const darkStoneMat = new THREE.MeshPhongMaterial({
+			color: 0x444444,
+			shininess: 15
+		});
+
+		const blueMat = new THREE.MeshPhongMaterial({
+			color: 0x1e90ff,
+			shininess: 60
+		});
+
+		const base = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.15, 0.17, 0.08, 24),
+			stoneMat
+		);
+		base.position.y = 0.04;
+		group.add(base);
+
+		const ring = new THREE.Mesh(
+			new THREE.TorusGeometry(0.13, 0.025, 12, 32),
+			darkStoneMat
+		);
+		ring.position.y = 0.09;
+		ring.rotation.x = Math.PI / 2;
+		group.add(ring);
+
+		const water = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.10, 0.10, 0.015, 24),
+			blueMat
+		);
+		water.position.y = 0.105;
+		group.add(water);
+
+		return group;
+	}
+
+	// =====================================================
+	// 紅色小車
+	// =====================================================
+
+	function createRedCar() {
+		const group = new THREE.Group();
+
+		const redMat = new THREE.MeshPhongMaterial({
+			color: 0xd71920,
+			shininess: 45
+		});
+
+		const whiteMat = new THREE.MeshPhongMaterial({
+			color: 0xf5f5f5,
+			shininess: 50
+		});
+
+		const blueMat = new THREE.MeshPhongMaterial({
+			color: 0x35a7ff,
+			shininess: 70
+		});
+
+		const blackMat = new THREE.MeshPhongMaterial({
+			color: 0x111111,
+			shininess: 15
+		});
+
+		// 車身
+		const body = new THREE.Mesh(
+			new THREE.BoxGeometry(0.42, 0.13, 0.22),
+			redMat
+		);
+		body.position.y = 0.08;
+		group.add(body);
+
+		// 車頂
+		const roof = new THREE.Mesh(
+			new THREE.BoxGeometry(0.24, 0.09, 0.18),
+			whiteMat
+		);
+		roof.position.y = 0.19;
+		group.add(roof);
+
+		// 藍色窗戶
+		const frontWin = new THREE.Mesh(
+			new THREE.BoxGeometry(0.06, 0.035, 0.17),
+			blueMat
+		);
+		frontWin.position.set(0.15, 0.205, 0);
+		group.add(frontWin);
+
+		const backWin = frontWin.clone();
+		backWin.position.x = -0.15;
+		group.add(backWin);
+
+		// 輪胎
+		const wheelPositions = [
+			[-0.14, 0.045, 0.13],
+			[0.14, 0.045, 0.13],
+			[-0.14, 0.045, -0.13],
+			[0.14, 0.045, -0.13]
+		];
+
+		wheelPositions.forEach(p => {
+			const wheel = new THREE.Mesh(
+				new THREE.CylinderGeometry(0.035, 0.035, 0.035, 12),
+				blackMat
+			);
+			wheel.rotation.x = Math.PI / 2;
+			wheel.position.set(p[0], p[1], p[2]);
+			group.add(wheel);
+		});
+
+		return group;
+	}
+
+	// =====================================================
+	// 蓬鬆樹
+	// =====================================================
+
+	function createPuffyTree(size = 1) {
+		const group = new THREE.Group();
+
+		const trunkMat = new THREE.MeshPhongMaterial({
+			color: 0x6b3f1d,
+			shininess: 10
+		});
+
+		const leafMat = new THREE.MeshPhongMaterial({
+			color: 0x2f8f2f,
+			shininess: 18
+		});
+
+		const leafMat2 = new THREE.MeshPhongMaterial({
+			color: 0x4caf32,
+			shininess: 18
+		});
+
+		// 樹幹，稍微傾斜，接近公仔感
+		const trunk = new THREE.Mesh(
+			new THREE.CylinderGeometry(0.035 * size, 0.055 * size, 0.38 * size, 12),
+			trunkMat
+		);
+		trunk.position.y = 0.18 * size;
+		trunk.rotation.z = 0.18;
+		group.add(trunk);
+
+		// 多顆球組成蓬鬆樹冠
+		const blobs = [
+			[0.00, 0.43, 0.00, 0.18],
+			[0.13, 0.39, 0.02, 0.15],
+			[-0.13, 0.39, -0.02, 0.15],
+			[0.04, 0.52, 0.06, 0.14],
+			[-0.04, 0.50, -0.07, 0.13],
+			[0.00, 0.36, 0.11, 0.14]
+		];
+
+		blobs.forEach((b, i) => {
+			const leaf = new THREE.Mesh(
+				new THREE.SphereGeometry(b[3] * size, 16, 16),
+				i % 2 === 0 ? leafMat : leafMat2
+			);
+			leaf.position.set(b[0] * size, b[1] * size, b[2] * size);
+			group.add(leaf);
+		});
+
+		return group;
+	}
+
     function setupMapSelector() {
 		document.getElementById('map-selector').onchange = function(e) {
 			const selectedPath = e.target.value;
 
 			new THREE.TextureLoader().load(selectedPath, t => { 
+				t.wrapS = THREE.RepeatWrapping;
+				t.wrapT = THREE.ClampToEdgeWrapping;
+				t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
 				globe.material.map = t; 
 				globe.material.color.setHex(0xffffff);
 				globe.material.needsUpdate = true;
 
+				// 只有界王星才顯示房子、樹、車、小井
 				if (selectedPath.includes("界王星")) {
 					createKingKaiObjects();
 				} else {
